@@ -2,7 +2,7 @@ import streamlit as st
 import ezdxf
 from ezdxf.addons import Importer
 import ezdxf.bbox
-from ezdxf.enums import TextEntityAlignment  # <-- EKLENEN YENİ KÜTÜPHANE
+from ezdxf.enums import TextEntityAlignment
 import os
 import tempfile
 import pandas as pd
@@ -91,10 +91,9 @@ if uploaded_files:
     status_text = st.empty()
     
     # --- YERLEŞİM (LAYOUT) AYARLARI ---
-    FIXED_TEXT_HEIGHT = 15.0  
-    MARGIN_X = 50.0           
-    MARGIN_Y = 100.0          
-    MAX_ROW_WIDTH = 2500.0    
+    MARGIN_X = 100.0          # Yatay boşluk
+    MARGIN_Y = 150.0          # Dikey boşluk (Yazılara yer açmak için bol bırakıldı)
+    MAX_ROW_WIDTH = 2500.0    # Satır genişliği
 
     results_data = []
     parsed_parts = []
@@ -167,17 +166,22 @@ if uploaded_files:
                 if hasattr(entity, 'translate'):
                     entity.translate(offset_x, offset_y, 0)
                     
-            # YAZI HİZALAMA HATASI BURADA DÜZELTİLDİ (TextEntityAlignment kullanıldı)
             center_x = current_x + (part['w'] / 2)
-            text_y_pos1 = current_y - 20.0
             
-            name_text = master_msp.add_text(part['name'], dxfattribs={'height': FIXED_TEXT_HEIGHT, 'color': 3})
+            # YAZI BOYUTU OPTİMİZASYONU (DİNAMİK)
+            # Genişliğin %5'i kadar olsun. Ancak 4mm'den küçük, 20mm'den büyük olmasın.
+            dynamic_text_height = max(4.0, min(part['w'] * 0.05, 20.0))
+            
+            # Yazıların çizimden ve birbirinden ne kadar uzak olacağı da dinamik belirleniyor
+            text_y_pos1 = current_y - (dynamic_text_height * 1.5) - 10.0
+            
+            name_text = master_msp.add_text(part['name'], dxfattribs={'height': dynamic_text_height, 'color': 3})
             name_text.set_placement((center_x, text_y_pos1), align=TextEntityAlignment.MIDDLE_CENTER)
 
             dim_str = f"{t['w_label']}: {part['w']:.1f} mm  x  {t['h_label']}: {part['h']:.1f} mm"
-            text_y_pos2 = text_y_pos1 - (FIXED_TEXT_HEIGHT * 1.5)
+            text_y_pos2 = text_y_pos1 - (dynamic_text_height * 1.5)
             
-            dim_text = master_msp.add_text(dim_str, dxfattribs={'height': FIXED_TEXT_HEIGHT * 0.8, 'color': 7})
+            dim_text = master_msp.add_text(dim_str, dxfattribs={'height': dynamic_text_height * 0.8, 'color': 7})
             dim_text.set_placement((center_x, text_y_pos2), align=TextEntityAlignment.MIDDLE_CENTER)
 
             importer = Importer(part['doc'], master_doc)
