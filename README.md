@@ -21,6 +21,7 @@ This project was entirely conceptualized and generated using AI (Vibecoding). It
 🌐 Live Demo
 You can run this app directly from your browser without installing anything!
 
+🇹🇷
 Makine mühendisleri, tasarımcılar ve CNC/Lazer kesim operatörleri için tasarlanmış web tabanlı bir araçtır. SolidWorks gibi programlardan aldığınız birden fazla 2D DXF dosyasını tek seferde yükleyerek parçaların tam dış sınır (Bounding Box) ölçülerini (En x Boy) hesaplar, üzerlerine isim/ölçü yazar ve hepsini tek bir dosyada birleştirir.
 
 🚀 Özellikler
