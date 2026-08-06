@@ -2,7 +2,7 @@ import streamlit as st
 import ezdxf
 from ezdxf.addons import Importer
 import ezdxf.bbox
-from ezdxf.enums import TextEntityAlignment
+from ezdxf.enums import TextEntityAlignment, MTextEntityAlignment # MText için hizalama kütüphanesi eklendi
 import os
 import tempfile
 import pandas as pd
@@ -39,7 +39,7 @@ locales = {
     },
     "tr": {
         "title": "📐 DXF Akıllı Birleştirici (Çoklu A4 ve Dış Ölçü)",
-        "subtitle": "Parçalar A4 sayfalarına gruplanır. Ölçü okları şeklin DIŞINDA, üretim etiketleri ise şeklin İÇİNDE yer alır.",
+        "subtitle": "Parçalar A4 sayfalarına gruplanır. Ölçü okları şeklin DIŞINDA, üretim etiketleri ise şeklin İÇİNDE (Tek Metin Kutusu olarak) yer alır.",
         "settings": "⚙️ Ayarlar",
         "lang_select": "🌐 Dil / Language",
         "about_title": "🤖 Bu Uygulama Hakkında",
@@ -78,7 +78,7 @@ with st.sidebar:
 # --- ANA EKRAN ---
 st.title(t['title'])
 st.markdown(f"*{t['subtitle']}*")
-st.warning("💡 **Dış Ölçülendirme & Sayfalama:** Ölçü okları şekillerin dışına (alt ve sağ) yerleştirilir. Çakışma olmaması için aralara otomatik pay bırakılır. Sayfa dolduğunda yeni bir A4 çerçevesi (Kırmızı Kutu) açılır.")
+st.warning("💡 **Dış Ölçülendirme & MTEXT:** Ölçü okları şekillerin dışına (alt ve sağ) yerleştirilir. Üretim etiketleri ise (Kod, Malzeme, Kalınlık vb.) AutoCAD'de tek tıkla düzenlenebilen tek bir **Çok Satırlı Metin (MTEXT)** kutusu içine yazılır.")
 
 uploaded_files = st.file_uploader(t['upload_label'], type=['dxf'], accept_multiple_files=True)
 
@@ -88,7 +88,7 @@ if uploaded_files:
     status_text = st.empty()
     
     # --- YERLEŞİM AYARLARI ---
-    BASE_MARGIN = 40.0 # Ölçü okları dışarıda olacağı için parçalar arasına 40mm baz boşluk bırakıyoruz
+    BASE_MARGIN = 40.0 
     
     results_data = []
     parsed_parts = []
@@ -138,19 +138,17 @@ if uploaded_files:
             
             progress_bar.progress((index + 1) / len(uploaded_files) * 0.3)
 
-        # Matris düzeni için Yüksekliğe göre büyükten küçüğe sırala
         parsed_parts.sort(key=lambda item: item['h'], reverse=True)
 
-        # --- A4 ÇERÇEVE (SAYFA) MATEMATİĞİ ---
-        # En büyük parça dış ölçüleriyle beraber sayfaya sığmalı
+        # --- A4 ÇERÇEVE MATEMATİĞİ ---
         min_page_w = max(2970.0, max_w_overall + (BASE_MARGIN * 4))
         min_page_h = max(2100.0, max_h_overall + (BASE_MARGIN * 4))
         
         PAGE_H = max(min_page_h, min_page_w / 1.414)
         PAGE_W = PAGE_H * 1.414
-        PAGE_GAP = PAGE_W * 0.10 # İki A4 sayfası arasındaki yatay boşluk
+        PAGE_GAP = PAGE_W * 0.10 
 
-        # AŞAMA 2: Dizilim, DIŞ ÖLÇÜLENDİRME ve İÇ ETİKETLER
+        # AŞAMA 2: Dizilim, DIŞ ÖLÇÜLENDİRME ve TEK KUTU (MTEXT) ETİKETLER
         status_text.text(t['step_2'])
         master_doc = ezdxf.new('R2010') 
         master_msp = master_doc.modelspace()
@@ -166,12 +164,10 @@ if uploaded_files:
             w = part['w']
             h = part['h']
 
-            # Dinamik Font (Şeklin içine sığacak kadar)
             max_font_by_width = w / 15.0
             max_font_by_height = h / 8.0
             font_size = max(1.0, min(max_font_by_width, max_font_by_height))
             
-            # Dinamik Boşluklar (Dışarıdaki ölçü oklarına yetecek kadar ekstra pay)
             part_spacing_x = max(BASE_MARGIN, font_size * 4)
             part_spacing_y = max(BASE_MARGIN, font_size * 4)
 
@@ -202,7 +198,7 @@ if uploaded_files:
             importer.finalize()
 
             # --- DIŞA DOĞRU ÖLÇÜLENDİRME ---
-            dim_offset = font_size * 2.5 # Oklar şeklin DIŞINDAN ne kadar uzakta dursun
+            dim_offset = font_size * 2.5 
             
             dim_overrides = {
                 "dimtxt": font_size * 0.9,
@@ -215,7 +211,7 @@ if uploaded_files:
                 "dimdec": 1
             }
 
-            # 1. YATAY ÖLÇÜ (Parçanın alt çeperinden DIŞARI doğru - Aşağı bakar)
+            # 1. YATAY ÖLÇÜ
             dim_w = master_msp.add_linear_dim(
                 base=(current_x + (w/2), (current_y - h) - dim_offset), 
                 p1=(current_x, current_y - h), 
@@ -224,7 +220,7 @@ if uploaded_files:
             )
             dim_w.render()
 
-            # 2. DİKEY ÖLÇÜ (Parçanın sağ çeperinden DIŞARI doğru - Sağa bakar)
+            # 2. DİKEY ÖLÇÜ
             dim_h = master_msp.add_linear_dim(
                 base=(current_x + w + dim_offset, current_y - (h/2)), 
                 p1=(current_x + w, current_y), 
@@ -234,7 +230,7 @@ if uploaded_files:
             )
             dim_h.render()
                     
-            # --- ŞEKLİN TAM MERKEZİNE YAZILACAK ÜRETİM ETİKETLERİ ---
+            # --- ŞEKLİN TAM MERKEZİNE TEK BİR TEXTFIELD (MTEXT) YAZMA ---
             display_name = os.path.splitext(part['name'])[0]
             file_parts = display_name.split('_')
             
@@ -249,35 +245,37 @@ if uploaded_files:
                 line2_str = " "
                 line3_str = " "
 
-            # Şeklin Mutlak Merkezi (İç Etiket)
+            # Şeklin Mutlak Merkezi
             center_x = current_x + (w / 2)
             center_y = current_y - (h / 2)
 
-            line1_y = center_y + (font_size * 1.5)
-            line2_y = center_y
-            line3_y = center_y - (font_size * 1.5)
-            
-            master_msp.add_text(line1_str, dxfattribs={'height': font_size, 'color': 2}).set_placement((center_x, line1_y), align=TextEntityAlignment.MIDDLE_CENTER)
+            # MTEXT FORMATLAMA (AutoCAD Format Kodları)
+            # \C2; = Sarı (Kod)
+            # \P = Alt Satıra Geçiş (Enter)
+            # \H0.9x; = Bir sonraki fontu kendi içinde %90 oranına küçült (Adet/Kalınlık ve Malzeme için)
+            # \C7; = Beyaz (Adet/Kalınlık)
+            # \C4; = Turkuaz (Malzeme)
             
             if line2_str.strip():
-                master_msp.add_text(line2_str, dxfattribs={'height': font_size * 0.9, 'color': 7}).set_placement((center_x, line2_y), align=TextEntityAlignment.MIDDLE_CENTER)
-            if line3_str.strip():
-                master_msp.add_text(line3_str, dxfattribs={'height': font_size * 0.9, 'color': 4}).set_placement((center_x, line3_y), align=TextEntityAlignment.MIDDLE_CENTER)
+                mtext_content = f"\\C2;{line1_str}\\P\\H0.9x;\\C7;{line2_str}\\P\\C4;{line3_str}"
+            else:
+                mtext_content = f"\\C2;{line1_str}"
             
-            # Bir Sonraki Parça İçin X'i ve Satır Yüksekliğini Güncelle
+            # Tek bir MTEXT nesnesi oluştur ve tam merkeze yerleştir
+            mtext = master_msp.add_mtext(mtext_content, dxfattribs={'char_height': font_size})
+            mtext.set_location((center_x, center_y), attachment_point=MTextEntityAlignment.MIDDLE_CENTER)
+            
+            # Bir Sonraki Parça İçin
             current_x += w + part_spacing_x
             max_row_height = max(max_row_height, h + part_spacing_y)
 
             progress_bar.progress(0.3 + ((index + 1) / len(parsed_parts) * 0.7))
 
-        # --- A4 ÇERÇEVELERİNİ ÇİZME (KIRMIZI KILAVUZ) ---
+        # --- A4 ÇERÇEVELERİNİ ÇİZME ---
         for p in range(page_idx + 1):
             px = p * (PAGE_W + PAGE_GAP)
-            # Kırmızı Renkte A4 Çerçevesi (1 = Kırmızı)
             frame_points = [(px, 0), (px + PAGE_W, 0), (px + PAGE_W, -PAGE_H), (px, -PAGE_H), (px, 0)]
             master_msp.add_lwpolyline(frame_points, dxfattribs={'color': 1})
-            
-            # Sayfa Başlığı (Tepede ortalanmış)
             master_msp.add_text(f"SAYFA {p+1}", dxfattribs={'height': PAGE_H * 0.02, 'color': 2}).set_placement((px + PAGE_W/2, PAGE_H * 0.02), align=TextEntityAlignment.BOTTOM_CENTER)
 
         # Çıktıyı Kaydet
