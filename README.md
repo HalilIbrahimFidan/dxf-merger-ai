@@ -20,3 +20,5 @@ This project was entirely conceptualized and generated using AI (Vibecoding). It
 
 🌐 Live Demo
 You can run this app directly from your browser without installing anything!
+
+https://dxf-merger-ai-dn7a66vyucpe6ra7dehy4v.streamlit.app/
