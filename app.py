@@ -2,6 +2,7 @@ import streamlit as st
 import ezdxf
 from ezdxf.addons import Importer
 import ezdxf.bbox
+from ezdxf.enums import TextEntityAlignment  # <-- EKLENEN YENİ KÜTÜPHANE
 import os
 import tempfile
 import pandas as pd
@@ -90,10 +91,10 @@ if uploaded_files:
     status_text = st.empty()
     
     # --- YERLEŞİM (LAYOUT) AYARLARI ---
-    FIXED_TEXT_HEIGHT = 15.0  # Metinlerin sabit boyutu (mm)
-    MARGIN_X = 50.0           # Parçalar arası yatay boşluk
-    MARGIN_Y = 100.0          # Parçalar arası dikey boşluk (Yazılar için ekstra alan)
-    MAX_ROW_WIDTH = 2500.0    # Bir satırın maksimum genişliği
+    FIXED_TEXT_HEIGHT = 15.0  
+    MARGIN_X = 50.0           
+    MARGIN_Y = 100.0          
+    MAX_ROW_WIDTH = 2500.0    
 
     results_data = []
     parsed_parts = []
@@ -101,7 +102,7 @@ if uploaded_files:
     max_h_overall = 0.0
 
     with tempfile.TemporaryDirectory() as temp_dir:
-        # AŞAMA 1: Dosyaları oku, ölç ve listeye kaydet (Henüz çizim yapmıyoruz)
+        # AŞAMA 1
         status_text.text(t['step_1'])
         
         for index, file in enumerate(uploaded_files):
@@ -140,13 +141,11 @@ if uploaded_files:
             except Exception as e:
                 st.error(f"{t['error_msg']} {file.name}: {str(e)}")
             
-            # İlk aşama ilerlemesi (0% - 50%)
             progress_bar.progress((index + 1) / len(uploaded_files) * 0.5)
 
-        # Çizimleri Yüksekliklerine göre büyükten küçüğe sırala (Daha temiz bir grid için)
         parsed_parts.sort(key=lambda item: item['h'], reverse=True)
 
-        # AŞAMA 2: Sıralanmış parçaları ana dosyaya yerleştir
+        # AŞAMA 2
         status_text.text(t['step_2'])
         master_doc = ezdxf.new('R2010') 
         master_msp = master_doc.modelspace()
@@ -156,13 +155,11 @@ if uploaded_files:
         max_row_height = 0.0
 
         for index, part in enumerate(parsed_parts):
-            # Satır sınırına ulaşıldıysa alt satıra geç
             if current_x + part['w'] > MAX_ROW_WIDTH and current_x > 0:
                 current_x = 0.0
-                current_y -= (max_row_height + MARGIN_Y) # Y ekseninde aşağı in
+                current_y -= (max_row_height + MARGIN_Y)
                 max_row_height = 0.0
                 
-            # Parçayı (0,0) noktasına değil, current_x ve current_y hedefine taşı
             offset_x = current_x - part['min_x']
             offset_y = current_y - part['min_y']
             
@@ -170,41 +167,36 @@ if uploaded_files:
                 if hasattr(entity, 'translate'):
                     entity.translate(offset_x, offset_y, 0)
                     
-            # 1. Satır Yazı: Dosya Adı (Parçanın tam altına, ortalı)
+            # YAZI HİZALAMA HATASI BURADA DÜZELTİLDİ (TextEntityAlignment kullanıldı)
             center_x = current_x + (part['w'] / 2)
             text_y_pos1 = current_y - 20.0
             
             name_text = master_msp.add_text(part['name'], dxfattribs={'height': FIXED_TEXT_HEIGHT, 'color': 3})
-            name_text.set_placement((center_x, text_y_pos1), align='MIDDLE_CENTER')
+            name_text.set_placement((center_x, text_y_pos1), align=TextEntityAlignment.MIDDLE_CENTER)
 
-            # 2. Satır Yazı: Ölçüler (Dosya adının biraz altına, daha küçük boyutta)
             dim_str = f"{t['w_label']}: {part['w']:.1f} mm  x  {t['h_label']}: {part['h']:.1f} mm"
             text_y_pos2 = text_y_pos1 - (FIXED_TEXT_HEIGHT * 1.5)
             
             dim_text = master_msp.add_text(dim_str, dxfattribs={'height': FIXED_TEXT_HEIGHT * 0.8, 'color': 7})
-            dim_text.set_placement((center_x, text_y_pos2), align='MIDDLE_CENTER')
+            dim_text.set_placement((center_x, text_y_pos2), align=TextEntityAlignment.MIDDLE_CENTER)
 
-            # Master'a import et
             importer = Importer(part['doc'], master_doc)
             importer.import_modelspace()
             importer.finalize()
             
-            # Bir sonraki parça için koordinatları hazırla
             current_x += part['w'] + MARGIN_X
             if part['h'] > max_row_height:
                 max_row_height = part['h']
 
-            # İkinci aşama ilerlemesi (50% - 100%)
             progress_bar.progress(0.5 + ((index + 1) / len(parsed_parts) * 0.5))
 
-        # Çıktıyı kaydet
         output_filepath = os.path.join(temp_dir, t['output_filename'])
         master_doc.saveas(output_filepath)
         
         with open(output_filepath, "rb") as file_to_download:
             dxf_data = file_to_download.read()
             
-        status_text.empty() # Durum yazısını temizle
+        status_text.empty()
 
         # --- TASARIM & SONUÇLAR ---
         st.markdown("---")
