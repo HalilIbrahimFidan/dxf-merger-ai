@@ -14,8 +14,8 @@ st.set_page_config(page_title="DXF Smart Merger", page_icon="📐", layout="wide
 # --- DİL SÖZLÜĞÜ ---
 locales = {
     "en": {
-        "title": "📐 DXF Smart Merger (A4 Print Mode)",
-        "subtitle": "Compact layout optimized for A4 printing. Dimensions and text are placed INSIDE the shapes with a calculated fixed font size.",
+        "title": "📐 DXF Smart Merger (A4 Matrix Mode)",
+        "subtitle": "Optimized A4 nesting grid. Texts and dimensions scale dynamically to fit strictly INSIDE each shape.",
         "settings": "⚙️ Settings",
         "lang_select": "🌐 Language / Dil",
         "about_title": "🤖 About this App",
@@ -28,22 +28,22 @@ locales = {
         "table_height": "Height (mm)",
         "error_msg": "Error processing",
         "results_title": "📊 Analysis Results",
-        "success_msg": "All drawings compactly merged for A4 printing!",
+        "success_msg": "All drawings compactly merged in an A4 Matrix!",
         "download_btn": "📥 Download Merged DXF",
-        "output_filename": "Merged_Drawings_A4.dxf",
+        "output_filename": "Merged_Drawings_Matrix.dxf",
         "metrics_total": "Total Files",
         "metrics_max_w": "Max Width",
         "metrics_max_h": "Max Height",
-        "step_1": "Analyzing and sorting files...",
-        "step_2": "Generating compact A4 layout..."
+        "step_1": "Analyzing boundaries and calculating A4 matrix...",
+        "step_2": "Generating layout, inward dimensions and dynamic labels..."
     },
     "tr": {
-        "title": "📐 DXF Akıllı Birleştirici (A4 Çıktı Modu)",
-        "subtitle": "A4 kağıdına çıktı almak için optimize edilmiş kompakt yerleşim. Yazılar ve ölçüler şeklin içine, kağıtta net okunacak sabit bir fontla eklenir.",
+        "title": "📐 DXF Akıllı Birleştirici (A4 Matris Modu)",
+        "subtitle": "A4 kağıdı için en sıkı yerleşim. Yazılar ve ölçüler her parçanın EN/BOY oranına göre otomatik küçülerek SADECE şeklin içine sığar.",
         "settings": "⚙️ Ayarlar",
         "lang_select": "🌐 Dil / Language",
         "about_title": "🤖 Bu Uygulama Hakkında",
-        "about_text": "Lazer kesim otomasyonu için tasarlanmıştır. Otomatik etiketleme için dosyalarınızı 'Kod_Adet_Kalınlık_Malzeme.dxf' şeklinde isimlendirin. (Örn: 103-01-008_1_1.5_DKPSac.dxf)",
+        "about_text": "Lazer kesim otomasyonu için tasarlanmıştır. Otomatik etiketleme için dosyalarınızı 'Kod_Adet_Kalınlık_Malzeme.dxf' şeklinde isimlendirin.",
         "vibecoding": "✨ **Yapay Zeka (Vibecoding) ile üretildi**",
         "upload_label": "DXF Dosyalarını Buraya Yükleyin",
         "processing": "adet dosya yüklendi. İşlem başlatılıyor...",
@@ -52,14 +52,14 @@ locales = {
         "table_height": "Yükseklik (mm)",
         "error_msg": "İşlenirken hata oluştu",
         "results_title": "📊 Analiz Sonuçları",
-        "success_msg": "A4 çıktısına uygun kompakt birleşim başarıyla tamamlandı!",
+        "success_msg": "A4 Matrisine uygun kompakt birleşim başarıyla tamamlandı!",
         "download_btn": "📥 Birleştirilmiş DXF'i İndir",
-        "output_filename": "Birlestirilmis_Cizimler_A4.dxf",
+        "output_filename": "Birlestirilmis_Cizimler_Matris.dxf",
         "metrics_total": "Toplam Dosya",
         "metrics_max_w": "Maksimum Genişlik",
         "metrics_max_h": "Maksimum Yükseklik",
-        "step_1": "Dosyalar analiz ediliyor ve boylarına göre sıralanıyor...",
-        "step_2": "A4 kompakt yerleşimi oluşturuluyor ve etiketler şekil içine ekleniyor..."
+        "step_1": "Sınırlar analiz ediliyor ve matris hesaplanıyor...",
+        "step_2": "Sıkı dizilim, içe dönük oklar ve dinamik etiketler oluşturuluyor..."
     }
 }
 
@@ -78,7 +78,7 @@ with st.sidebar:
 # --- ANA EKRAN ---
 st.title(t['title'])
 st.markdown(f"*{t['subtitle']}*")
-st.warning("💡 **A4 Optimizasyonu:** Çizimler aralarındaki boşluklar minimuma indirilerek dizilir. Ölçüler ve üretim kodları (Kod_Adet_Kalınlık_Malzeme) doğrudan parçanın merkezine işlenir.")
+st.warning("💡 **Sıfır Taşma:** Artık metinler ve ölçüler asla dışarı taşmaz. Program her parçanın kendi genişliğini ve yüksekliğini ölçerek metin boyutunu parçanın tam içine sığacak şekilde dinamik hesaplar.")
 
 uploaded_files = st.file_uploader(t['upload_label'], type=['dxf'], accept_multiple_files=True)
 
@@ -87,8 +87,8 @@ if uploaded_files:
     progress_bar = st.progress(0)
     status_text = st.empty()
     
-    # --- A4 İÇİN ÇOK SIKI (COMPACT) YERLEŞİM AYARLARI ---
-    MARGIN = 20.0 # Parçalar arası sadece 20mm boşluk
+    # --- MATRİS YERLEŞİM (COMPACT NESTING) AYARLARI ---
+    MARGIN = 5.0 # Parçalar birbirine Neredeyse Bitişik (5mm)
     
     results_data = []
     parsed_parts = []
@@ -97,7 +97,7 @@ if uploaded_files:
     total_area = 0.0
 
     with tempfile.TemporaryDirectory() as temp_dir:
-        # AŞAMA 1: Oku, Sırala ve Alan Hesapla
+        # AŞAMA 1: Oku, Sınırları Belirle ve Alan Hesapla
         status_text.text(t['step_1'])
         
         for index, file in enumerate(uploaded_files):
@@ -119,7 +119,7 @@ if uploaded_files:
                     if w > max_w_overall: max_w_overall = w
                     if h > max_h_overall: max_h_overall = h
                     
-                    # Kapladığı tahmini alanı hesapla (A4 formülünde kullanılacak)
+                    # Kapladığı alanı hesapla (A4 satır optimizasyonu için)
                     total_area += (w + MARGIN) * (h + MARGIN)
                     
                     parsed_parts.append({
@@ -141,17 +141,15 @@ if uploaded_files:
             
             progress_bar.progress((index + 1) / len(uploaded_files) * 0.3)
 
+        # PARÇALARI YÜKSEKLİĞİNE GÖRE SIRALA (Büyükler Önce) - Düzenli Matris İçin
         parsed_parts.sort(key=lambda item: item['h'], reverse=True)
 
-        # --- A4 YATAY (LANDSCAPE) MATEMATİĞİ ---
-        # Toplam alanın A4 oranında (1.414) dağıtılması için optimum satır genişliği hesaplanır
+        # --- A4 YATAY (LANDSCAPE) MATRİS MATEMATİĞİ ---
+        # Toplam alanın A4 oranında (Genişlik = Yükseklik * 1.414) dağıtılması
         optimal_width = max(max_w_overall + MARGIN, math.sqrt(total_area * 1.414))
         MAX_ROW_WIDTH = optimal_width
-        
-        # A4 kağıdında (297mm) yazının yaklaşık 2.5mm çıkması için "Mükemmel Sabit Font Boyutu" formülü
-        FIXED_TEXT_HEIGHT = max(3.0, (2.5 * MAX_ROW_WIDTH) / 277.0)
 
-        # AŞAMA 2: Kompakt Dizilim, İç Ölçülendirme ve İç Etiketler
+        # AŞAMA 2: Dizilim ve DİNAMİK İÇ METİNLENDİRME
         status_text.text(t['step_2'])
         master_doc = ezdxf.new('R2010') 
         master_msp = master_doc.modelspace()
@@ -164,6 +162,7 @@ if uploaded_files:
             w = part['w']
             h = part['h']
 
+            # Satır sonuna gelince alt satıra (rafa) geçiş
             if current_x + w > MAX_ROW_WIDTH and current_x > 0:
                 current_x = 0.0
                 current_y -= (max_row_height + MARGIN)
@@ -180,22 +179,32 @@ if uploaded_files:
             importer.import_modelspace()
             importer.finalize()
 
-            # --- İÇE DOĞRU ÖLÇÜLENDİRME (İÇ OKLAR) ---
-            # Okları dışarı değil, şeklin hemen içine doğru basıyoruz
-            dim_offset = FIXED_TEXT_HEIGHT * 1.5
+            # -------------------------------------------------------------
+            # DİNAMİK FONT HESAPLAMA (ASLA TAŞMA YAPMAYAN ALGORİTMA)
+            # Genişliğe yaklaşık 12-15 karakter sığmalı, Yüksekliğe 4-5 satır sığmalı
+            # Hangisi daha darsa (sınırlandırıcıysa) font boyutu ona göre ezilir.
+            max_font_by_width = w / 15.0
+            max_font_by_height = h / 8.0
+            
+            # Yazı boyutu en az 0.5mm olsun (hata vermemesi için), hesaplananı geçmesin
+            font_size = max(0.5, min(max_font_by_width, max_font_by_height))
+            # -------------------------------------------------------------
+
+            # --- İÇE DOĞRU ÖLÇÜLENDİRME ---
+            dim_offset = font_size * 2.0 # Oklar kenardan ne kadar içeride dursun
             
             dim_overrides = {
-                "dimtxt": FIXED_TEXT_HEIGHT,
-                "dimgap": FIXED_TEXT_HEIGHT * 0.3,
-                "dimexe": FIXED_TEXT_HEIGHT * 0.2, # Uzantı çizgileri yok denecek kadar kısaltıldı (Karmaşa olmasın diye)
-                "dimexo": FIXED_TEXT_HEIGHT * 0.2,
-                "dimclrd": 3,
+                "dimtxt": font_size * 0.9,
+                "dimgap": font_size * 0.3,
+                "dimexe": font_size * 0.2, # Uzantı (kuyruk) çizgileri neredeyse yok
+                "dimexo": font_size * 0.2,
+                "dimclrd": 3,  # Yeşil
                 "dimclre": 3,
-                "dimclrt": 7,
+                "dimclrt": 7,  # Beyaz
                 "dimdec": 1
             }
 
-            # 1. YATAY ÖLÇÜ (Şeklin Alt Kenarından İçe Doğru)
+            # 1. YATAY ÖLÇÜ (İÇERİ BAKAN OKLAR)
             dim_w = master_msp.add_linear_dim(
                 base=(current_x + (w/2), current_y + dim_offset), 
                 p1=(current_x, current_y), 
@@ -204,7 +213,7 @@ if uploaded_files:
             )
             dim_w.render()
 
-            # 2. DİKEY ÖLÇÜ (Şeklin Sol Kenarından İçe Doğru)
+            # 2. DİKEY ÖLÇÜ (İÇERİ BAKAN OKLAR)
             dim_h = master_msp.add_linear_dim(
                 base=(current_x + dim_offset, current_y + (h/2)), 
                 p1=(current_x, current_y), 
@@ -214,7 +223,7 @@ if uploaded_files:
             )
             dim_h.render()
                     
-            # --- ŞEKLİN MERKEZİNE SABİT BOYLUTLU ETİKET ---
+            # --- ŞEKLİN TAM MERKEZİNE YAZILACAK ETİKETLER ---
             display_name = os.path.splitext(part['name'])[0]
             file_parts = display_name.split('_')
             
@@ -229,22 +238,23 @@ if uploaded_files:
                 line2_str = " "
                 line3_str = " "
 
-            # Şeklin TAM MERKEZ koordinatları
+            # Merkez Koordinatları
             center_x = current_x + (w / 2)
             center_y = current_y + (h / 2)
 
-            # Yazıları merkeze alt alta diziyoruz (Sabit FIXED_TEXT_HEIGHT boyutuyla)
-            line1_y = center_y + (FIXED_TEXT_HEIGHT * 1.5)
+            # Satırların Y pozisyonları (Ortaya hizalanmış)
+            line1_y = center_y + (font_size * 1.5)
             line2_y = center_y
-            line3_y = center_y - (FIXED_TEXT_HEIGHT * 1.5)
+            line3_y = center_y - (font_size * 1.5)
             
-            master_msp.add_text(line1_str, dxfattribs={'height': FIXED_TEXT_HEIGHT, 'color': 2}).set_placement((center_x, line1_y), align=TextEntityAlignment.MIDDLE_CENTER)
+            master_msp.add_text(line1_str, dxfattribs={'height': font_size, 'color': 2}).set_placement((center_x, line1_y), align=TextEntityAlignment.MIDDLE_CENTER)
             
             if line2_str.strip():
-                master_msp.add_text(line2_str, dxfattribs={'height': FIXED_TEXT_HEIGHT * 0.9, 'color': 7}).set_placement((center_x, line2_y), align=TextEntityAlignment.MIDDLE_CENTER)
+                master_msp.add_text(line2_str, dxfattribs={'height': font_size * 0.9, 'color': 7}).set_placement((center_x, line2_y), align=TextEntityAlignment.MIDDLE_CENTER)
             if line3_str.strip():
-                master_msp.add_text(line3_str, dxfattribs={'height': FIXED_TEXT_HEIGHT * 0.9, 'color': 4}).set_placement((center_x, line3_y), align=TextEntityAlignment.MIDDLE_CENTER)
+                master_msp.add_text(line3_str, dxfattribs={'height': font_size * 0.9, 'color': 4}).set_placement((center_x, line3_y), align=TextEntityAlignment.MIDDLE_CENTER)
             
+            # Matriste Bir Sonraki Yere Geç
             current_x += w + MARGIN
             if h > max_row_height:
                 max_row_height = h
