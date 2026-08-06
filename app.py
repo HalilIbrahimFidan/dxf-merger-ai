@@ -9,7 +9,7 @@ import pandas as pd
 # --- SAYFA AYARLARI ---
 st.set_page_config(page_title="DXF Smart Merger", page_icon="📐", layout="wide")
 
-# --- DİL SÖZLÜĞÜ (TRANSLATIONS) ---
+# --- DİL SÖZLÜĞÜ ---
 locales = {
     "en": {
         "title": "📐 DXF Smart Merger & Measurer",
@@ -33,7 +33,9 @@ locales = {
         "h_label": "H",
         "metrics_total": "Total Files",
         "metrics_max_w": "Max Width",
-        "metrics_max_h": "Max Height"
+        "metrics_max_h": "Max Height",
+        "step_1": "Analyzing and sorting files...",
+        "step_2": "Merging and generating layout..."
     },
     "tr": {
         "title": "📐 DXF Akıllı Birleştirici",
@@ -57,16 +59,16 @@ locales = {
         "h_label": "Y",
         "metrics_total": "Toplam Dosya",
         "metrics_max_w": "Maksimum Genişlik",
-        "metrics_max_h": "Maksimum Yükseklik"
+        "metrics_max_h": "Maksimum Yükseklik",
+        "step_1": "Dosyalar analiz ediliyor ve sıralanıyor...",
+        "step_2": "Çizimler birleştiriliyor ve yerleştiriliyor..."
     }
 }
 
-# --- SOL MENÜ (SIDEBAR) & DİL SEÇİMİ ---
+# --- SOL MENÜ & DİL SEÇİMİ ---
 with st.sidebar:
     st.header("🌐 Language / Dil")
     selected_lang = st.radio("", ["🇬🇧 English", "🇹🇷 Türkçe"], label_visibility="collapsed")
-    
-    # Seçilen dile göre dictionary anahtarını belirle
     lang = "tr" if "Türkçe" in selected_lang else "en"
     t = locales[lang]
 
@@ -75,7 +77,7 @@ with st.sidebar:
     st.info(t['about_text'])
     st.markdown(t['vibecoding'])
 
-# --- ANA EKRAN (MAIN UI) ---
+# --- ANA EKRAN ---
 st.title(t['title'])
 st.markdown(f"*{t['subtitle']}*")
 st.markdown("---")
@@ -85,21 +87,23 @@ uploaded_files = st.file_uploader(t['upload_label'], type=['dxf'], accept_multip
 if uploaded_files:
     st.success(f"{len(uploaded_files)} {t['processing']}")
     progress_bar = st.progress(0)
+    status_text = st.empty()
     
+    # --- YERLEŞİM (LAYOUT) AYARLARI ---
+    FIXED_TEXT_HEIGHT = 15.0  # Metinlerin sabit boyutu (mm)
+    MARGIN_X = 50.0           # Parçalar arası yatay boşluk
+    MARGIN_Y = 100.0          # Parçalar arası dikey boşluk (Yazılar için ekstra alan)
+    MAX_ROW_WIDTH = 2500.0    # Bir satırın maksimum genişliği
+
     results_data = []
+    parsed_parts = []
     max_w_overall = 0.0
     max_h_overall = 0.0
 
     with tempfile.TemporaryDirectory() as temp_dir:
-        master_doc = ezdxf.new('R2010') 
-        master_msp = master_doc.modelspace()
+        # AŞAMA 1: Dosyaları oku, ölç ve listeye kaydet (Henüz çizim yapmıyoruz)
+        status_text.text(t['step_1'])
         
-        current_x = 0.0
-        current_y = 0.0
-        max_row_height = 0.0
-        margin = 50.0 
-        max_width = 1500.0 
-
         for index, file in enumerate(uploaded_files):
             temp_filepath = os.path.join(temp_dir, file.name)
             with open(temp_filepath, "wb") as f:
@@ -113,76 +117,107 @@ if uploaded_files:
                 if bbox.has_data:
                     min_x, min_y, _ = bbox.extmin
                     max_x, max_y, _ = bbox.extmax
+                    w = max_x - min_x
+                    h = max_y - min_y
                     
-                    width = max_x - min_x
-                    height = max_y - min_y
+                    if w > max_w_overall: max_w_overall = w
+                    if h > max_h_overall: max_h_overall = h
                     
-                    # İstatistikleri güncelle
-                    if width > max_w_overall: max_w_overall = width
-                    if height > max_h_overall: max_h_overall = height
+                    parsed_parts.append({
+                        "name": file.name,
+                        "doc": doc,
+                        "w": w,
+                        "h": h,
+                        "min_x": min_x,
+                        "min_y": min_y
+                    })
                     
                     results_data.append({
                         t['table_filename']: file.name, 
-                        t['table_width']: round(width, 1), 
-                        t['table_height']: round(height, 1)
+                        t['table_width']: round(w, 1), 
+                        t['table_height']: round(h, 1)
                     })
-                    
-                    if current_x + width > max_width and current_x > 0:
-                        current_x = 0
-                        current_y += max_row_height + margin
-                        max_row_height = 0
-                        
-                    target_x = current_x
-                    target_y = current_y
-                    
-                    offset_x = target_x - min_x
-                    offset_y = target_y - min_y
-                    
-                    for entity in msp:
-                        if hasattr(entity, 'translate'):
-                            entity.translate(offset_x, offset_y, 0)
-                            
-                    # Dinamik metin (Dile göre G/Y veya W/H)
-                    text_content = f"{file.name}\n{t['w_label']}: {width:.1f} mm\n{t['h_label']}: {height:.1f} mm"
-                    text_height = max(10.0, height * 0.05)
-                    master_msp.add_text(
-                        text_content, 
-                        dxfattribs={'height': text_height, 'color': 3}
-                    ).set_placement((target_x, target_y + height + (margin / 2)))
-
-                    importer = Importer(doc, master_doc)
-                    importer.import_modelspace()
-                    importer.finalize()
-                    
-                    current_x += width + margin
-                    max_row_height = max(max_row_height, height)
-                    
             except Exception as e:
                 st.error(f"{t['error_msg']} {file.name}: {str(e)}")
             
-            progress_bar.progress((index + 1) / len(uploaded_files))
+            # İlk aşama ilerlemesi (0% - 50%)
+            progress_bar.progress((index + 1) / len(uploaded_files) * 0.5)
 
+        # Çizimleri Yüksekliklerine göre büyükten küçüğe sırala (Daha temiz bir grid için)
+        parsed_parts.sort(key=lambda item: item['h'], reverse=True)
+
+        # AŞAMA 2: Sıralanmış parçaları ana dosyaya yerleştir
+        status_text.text(t['step_2'])
+        master_doc = ezdxf.new('R2010') 
+        master_msp = master_doc.modelspace()
+        
+        current_x = 0.0
+        current_y = 0.0
+        max_row_height = 0.0
+
+        for index, part in enumerate(parsed_parts):
+            # Satır sınırına ulaşıldıysa alt satıra geç
+            if current_x + part['w'] > MAX_ROW_WIDTH and current_x > 0:
+                current_x = 0.0
+                current_y -= (max_row_height + MARGIN_Y) # Y ekseninde aşağı in
+                max_row_height = 0.0
+                
+            # Parçayı (0,0) noktasına değil, current_x ve current_y hedefine taşı
+            offset_x = current_x - part['min_x']
+            offset_y = current_y - part['min_y']
+            
+            for entity in part['doc'].modelspace():
+                if hasattr(entity, 'translate'):
+                    entity.translate(offset_x, offset_y, 0)
+                    
+            # 1. Satır Yazı: Dosya Adı (Parçanın tam altına, ortalı)
+            center_x = current_x + (part['w'] / 2)
+            text_y_pos1 = current_y - 20.0
+            
+            name_text = master_msp.add_text(part['name'], dxfattribs={'height': FIXED_TEXT_HEIGHT, 'color': 3})
+            name_text.set_placement((center_x, text_y_pos1), align='MIDDLE_CENTER')
+
+            # 2. Satır Yazı: Ölçüler (Dosya adının biraz altına, daha küçük boyutta)
+            dim_str = f"{t['w_label']}: {part['w']:.1f} mm  x  {t['h_label']}: {part['h']:.1f} mm"
+            text_y_pos2 = text_y_pos1 - (FIXED_TEXT_HEIGHT * 1.5)
+            
+            dim_text = master_msp.add_text(dim_str, dxfattribs={'height': FIXED_TEXT_HEIGHT * 0.8, 'color': 7})
+            dim_text.set_placement((center_x, text_y_pos2), align='MIDDLE_CENTER')
+
+            # Master'a import et
+            importer = Importer(part['doc'], master_doc)
+            importer.import_modelspace()
+            importer.finalize()
+            
+            # Bir sonraki parça için koordinatları hazırla
+            current_x += part['w'] + MARGIN_X
+            if part['h'] > max_row_height:
+                max_row_height = part['h']
+
+            # İkinci aşama ilerlemesi (50% - 100%)
+            progress_bar.progress(0.5 + ((index + 1) / len(parsed_parts) * 0.5))
+
+        # Çıktıyı kaydet
         output_filepath = os.path.join(temp_dir, t['output_filename'])
         master_doc.saveas(output_filepath)
         
         with open(output_filepath, "rb") as file_to_download:
             dxf_data = file_to_download.read()
+            
+        status_text.empty() # Durum yazısını temizle
 
-        # --- TASARIM GÜNCELLEMELERİ (METRİKLER) ---
+        # --- TASARIM & SONUÇLAR ---
         st.markdown("---")
         st.subheader(t['results_title'])
         
-        # Üst kısıma havalı özet kutuları (Metrics) ekliyoruz
         m1, m2, m3 = st.columns(3)
         m1.metric(label=t['metrics_total'], value=f"{len(results_data)}")
         m2.metric(label=t['metrics_max_w'], value=f"{round(max_w_overall,1)} mm")
         m3.metric(label=t['metrics_max_h'], value=f"{round(max_h_overall,1)} mm")
         
-        st.write("") # Boşluk
+        st.write("") 
         
-        # Alt kısımda tablo ve indirme butonu
         col1, col2 = st.columns([2, 1])
-        
         with col1:
             st.dataframe(pd.DataFrame(results_data), use_container_width=True, hide_index=True)
             
